@@ -10,6 +10,8 @@ no extra launcher (rofi/wofi/fuzzel/walker) required — and shows a
 [Nerd Font](https://www.nerdfonts.com/) glyph per row for common terminals,
 browsers, editors, and a handful of other apps.
 
+![Window switcher preview](preview.png)
+
 ## Why
 
 Hyprland/Omarchy already bind `ALT + TAB` to "focus next window", which

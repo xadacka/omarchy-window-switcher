@@ -49,7 +49,7 @@ icon_for_class() {
       printf '%s' $'' ;;                                   # nf-fa-image
     *thunderbird*)
       printf '%s' $'' ;;                                   # nf-fa-envelope
-    *discord*|*slack*|*telegram*|*signal*)
+    *discord*|*slack*|*telegram*|*signal*|*beeper*)
       printf '%s' $'' ;;                                   # nf-fa-comments
     *nautilus*|*thunar*|*pcmanfm*|*dolphin*|*nemo*|*files*)
       printf '%s' $'' ;;                                   # nf-fa-folder
