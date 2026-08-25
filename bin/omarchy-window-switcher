@@ -1,0 +1,64 @@
+#!/bin/bash
+
+# omarchy:summary=Open a searchable list of open windows and focus the one picked
+# omarchy:args=[]
+
+set -euo pipefail
+
+selection_file=$(mktemp)
+done_file=$(mktemp)
+rm -f "$done_file"
+trap 'rm -f "$selection_file" "$done_file"' EXIT
+
+clients_json=$(hyprctl clients -j)
+
+# Skip the currently focused window (focusHistoryID 0) — picking it would be a no-op.
+mapfile -t rows < <(jq -r '
+  sort_by(.focusHistoryID) | .[] |
+  select(.mapped == true and .focusHistoryID > 0) |
+  [.address,
+   (if (.title // "") != "" then .title elif (.initialTitle // "") != "" then .initialTitle else "(untitled)" end),
+   (.class // ""),
+   .workspace.name] | @tsv
+' <<<"$clients_json")
+
+if (( ${#rows[@]} == 0 )); then
+  exit 0
+fi
+
+# cut (not bash read/IFS) because bash's field splitting on tab collapses
+# consecutive delimiters, silently dropping empty fields like a blank title.
+tab=$'\t'
+declare -A address_for
+options=()
+for row in "${rows[@]}"; do
+  address=$(cut -f1 <<<"$row")
+  title=$(cut -f2 <<<"$row")
+  class=$(cut -f3 <<<"$row")
+  workspace=$(cut -f4 <<<"$row")
+  detail="$class · workspace $workspace"
+  key="${title}${tab}${detail}"
+  [[ -n ${address_for[$key]:-} ]] || address_for["$key"]="$address"
+  options+=("${tab}${title}${tab}${detail}")
+done
+
+options_json=$(printf '%s\n' "${options[@]}" | jq -R -s -c 'split("\n")[:-1]')
+payload=$(jq -nc \
+  --argjson options "$options_json" \
+  --arg selectionFile "$selection_file" \
+  --arg doneFile "$done_file" \
+  '{mode:"select", prompt:"Switch window", options:$options, selectionFile:$selectionFile, doneFile:$doneFile}')
+
+result=$(omarchy-shell shell summon omarchy.menu "$payload")
+[[ $result == "ok" ]] || exit 1
+
+while [[ ! -e $done_file ]]; do
+  sleep 0.01
+done
+
+[[ -s $selection_file ]] || exit 0
+
+selection=$(<"$selection_file")
+address=${address_for[$selection]:-}
+
+[[ -n $address ]] && hyprctl dispatch "hl.dsp.focus({ window = \"address:$address\" })" >/dev/null
