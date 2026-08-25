@@ -26,6 +26,38 @@ if (( ${#rows[@]} == 0 )); then
   exit 0
 fi
 
+# Nerd Font glyphs (FontAwesome block, which JetBrainsMono Nerd Font — the
+# menu's font — carries in full) keyed off common window classes. Falls back
+# to a generic window glyph for anything unrecognized.
+icon_for_class() {
+  case "${1,,}" in
+    *ghostty*|*alacritty*|*kitty*|*foot*|*wezterm*|*xterm*|*konsole*|*terminal*)
+      printf '%s' $'' ;;                                   # nf-fa-terminal
+    *firefox*|*librewolf*|*floorp*|*zen-browser*|*waterfox*)
+      printf '%s' $'' ;;                                   # nf-fa-firefox
+    *chromium*|*chrome*|*vivaldi*|*brave*|*edge*|*opera*)
+      printf '%s' $'' ;;                                   # nf-fa-chrome
+    *code*|*cursor*|*sublime*|*jetbrains*|*idea*|*pycharm*|*webstorm*|*zed*|*vim*|*emacs*)
+      printf '%s' $'' ;;                                   # nf-fa-code
+    *steam*)
+      printf '%s' $'' ;;                                   # nf-fa-steam
+    *spotify*)
+      printf '%s' $'' ;;                                   # nf-fa-music
+    *vlc*|*mpv*|*celluloid*)
+      printf '%s' $'' ;;                                   # nf-fa-film
+    *gimp*|*inkscape*|*krita*)
+      printf '%s' $'' ;;                                   # nf-fa-image
+    *thunderbird*)
+      printf '%s' $'' ;;                                   # nf-fa-envelope
+    *discord*|*slack*|*telegram*|*signal*)
+      printf '%s' $'' ;;                                   # nf-fa-comments
+    *nautilus*|*thunar*|*pcmanfm*|*dolphin*|*nemo*|*files*)
+      printf '%s' $'' ;;                                   # nf-fa-folder
+    *)
+      printf '%s' $'' ;;                                   # nf-fa-desktop (generic)
+  esac
+}
+
 # cut (not bash read/IFS) because bash's field splitting on tab collapses
 # consecutive delimiters, silently dropping empty fields like a blank title.
 tab=$'\t'
@@ -36,10 +68,11 @@ for row in "${rows[@]}"; do
   title=$(cut -f2 <<<"$row")
   class=$(cut -f3 <<<"$row")
   workspace=$(cut -f4 <<<"$row")
-  detail="$class · workspace $workspace"
+  icon=$(icon_for_class "$class")
+  detail="Workspace $workspace"
   key="${title}${tab}${detail}"
   [[ -n ${address_for[$key]:-} ]] || address_for["$key"]="$address"
-  options+=("${tab}${title}${tab}${detail}")
+  options+=("${icon}${tab}${title}${tab}${detail}")
 done
 
 options_json=$(printf '%s\n' "${options[@]}" | jq -R -s -c 'split("\n")[:-1]')

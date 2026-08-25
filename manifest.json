@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.xadacka.window-switcher",
+  "name": "Window Switcher",
+  "version": "1.0.0",
+  "author": "xadacka",
+  "license": "MIT",
+  "description": "Searchable Alt-Tab alternative: lists open windows in Omarchy's own menu overlay and focuses the one you pick.",
+  "kinds": [
+    "service"
+  ],
+  "entryPoints": {
+    "service": "Service.qml"
+  }
+}
