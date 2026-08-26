@@ -26,17 +26,34 @@ Item {
 
   Component.onCompleted: bootstrapProcess.running = true
 
+  // Checks the marker and appends the binding through a single already-open
+  // file descriptor, rather than separate `[[ -f ]]` / `grep ... "$bindings"`
+  // / `>> "$bindings"` operations that each reopen the path. Reopening the
+  // path repeatedly leaves a window between checking and writing where the
+  // path could be swapped for a symlink into another user-owned file; a
+  // marketplace security reviewer flagged exactly this
+  // (github.com/HANCORE-linux/omarchy-plugin-marketplace/issues/2460). One
+  // open still can't be made fully atomic in bash (no O_NOFOLLOW), so the
+  // `-L` check right before opening is a best-effort narrowing of that gap,
+  // not a guarantee — but every check and the write itself now share one fd,
+  // so nothing can be swapped in between them.
   readonly property string bootstrapScript:
     "set -euo pipefail\n" +
     "chmod +x \"" + scriptPath + "\" 2>/dev/null || true\n" +
     "bindings=\"" + bindingsFile + "\"\n" +
-    "[[ -f \"$bindings\" ]] || exit 0\n" +
-    "grep -qF \"" + marker + "\" \"$bindings\" && exit 0\n" +
+    "[[ -e \"$bindings\" ]] || exit 0\n" +
+    "[[ ! -L \"$bindings\" ]] || exit 0\n" +
+    "exec {fd}<>\"$bindings\"\n" +
+    "if grep -qF \"" + marker + "\" <&\"$fd\"; then\n" +
+    "  exec {fd}>&-\n" +
+    "  exit 0\n" +
+    "fi\n" +
     "{\n" +
     "  echo ''\n" +
     "  echo '-- Added by the xadacka.window-switcher plugin.'\n" +
     "  echo 'o.bind(\"" + bindKey + "\", \"Window switcher\", \"" + scriptPath + "\")'\n" +
-    "} >> \"$bindings\"\n" +
+    "} >&\"$fd\"\n" +
+    "exec {fd}>&-\n" +
     "command -v hyprctl >/dev/null 2>&1 && hyprctl reload >/dev/null 2>&1 || true\n"
 
   Process {
