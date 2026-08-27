@@ -26,34 +26,41 @@ Item {
 
   Component.onCompleted: bootstrapProcess.running = true
 
-  // Checks the marker and appends the binding through a single already-open
-  // file descriptor, rather than separate `[[ -f ]]` / `grep ... "$bindings"`
-  // / `>> "$bindings"` operations that each reopen the path. Reopening the
-  // path repeatedly leaves a window between checking and writing where the
-  // path could be swapped for a symlink into another user-owned file; a
-  // marketplace security reviewer flagged exactly this
-  // (github.com/HANCORE-linux/omarchy-plugin-marketplace/issues/2460). One
-  // open still can't be made fully atomic in bash (no O_NOFOLLOW), so the
-  // `-L` check right before opening is a best-effort narrowing of that gap,
-  // not a guarantee — but every check and the write itself now share one fd,
-  // so nothing can be swapped in between them.
+  // Writes via the standard atomic-replace pattern (build a temp file, then
+  // `mv` it over the target) rather than opening ~/.config/hypr/bindings.lua
+  // for writing at all. A prior version narrowed the check-to-open gap
+  // instead of removing it, which a marketplace security reviewer correctly
+  // rejected — narrower is not the same as closed
+  // (github.com/HANCORE-linux/omarchy-plugin-marketplace/issues/2460).
+  //
+  // This version never opens the bindings path for writing, so there is
+  // nothing for a symlink swapped into that path to redirect: `cp` and
+  // `grep` against it are reads (at worst, a swap makes us read and copy
+  // some other file's bytes into our own temp file — never a write to
+  // anywhere but our own fresh mktemp file). The final `mv -f -- "$tmp"
+  // "$bindings"` is a rename(2), which POSIX guarantees replaces whatever
+  // directory entry currently sits at that path — symlink or not — rather
+  // than following it; it can never write through to a symlink's target.
+  // So the only path this script can ever write new content to is
+  // literally ~/.config/hypr/bindings.lua itself, regardless of what that
+  // path resolves to at any point while this runs.
   readonly property string bootstrapScript:
     "set -euo pipefail\n" +
     "chmod +x \"" + scriptPath + "\" 2>/dev/null || true\n" +
     "bindings=\"" + bindingsFile + "\"\n" +
     "[[ -e \"$bindings\" ]] || exit 0\n" +
-    "[[ ! -L \"$bindings\" ]] || exit 0\n" +
-    "exec {fd}<>\"$bindings\"\n" +
-    "if grep -qF \"" + marker + "\" <&\"$fd\"; then\n" +
-    "  exec {fd}>&-\n" +
-    "  exit 0\n" +
-    "fi\n" +
+    "grep -qF \"" + marker + "\" \"$bindings\" && exit 0\n" +
+    "dir=$(dirname -- \"$bindings\")\n" +
+    "tmp=$(mktemp \"$dir/.bindings.lua.XXXXXX\")\n" +
+    "trap 'rm -f \"$tmp\"' EXIT\n" +
+    "cp -- \"$bindings\" \"$tmp\"\n" +
     "{\n" +
     "  echo ''\n" +
     "  echo '-- Added by the xadacka.window-switcher plugin.'\n" +
     "  echo 'o.bind(\"" + bindKey + "\", \"Window switcher\", \"" + scriptPath + "\")'\n" +
-    "} >&\"$fd\"\n" +
-    "exec {fd}>&-\n" +
+    "} >> \"$tmp\"\n" +
+    "chmod --reference=\"$bindings\" \"$tmp\" 2>/dev/null || true\n" +
+    "mv -f -- \"$tmp\" \"$bindings\"\n" +
     "command -v hyprctl >/dev/null 2>&1 && hyprctl reload >/dev/null 2>&1 || true\n"
 
   Process {
