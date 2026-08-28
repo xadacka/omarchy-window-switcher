@@ -25,12 +25,25 @@ elif command -v omarchy >/dev/null 2>&1 && omarchy menu keybindings --print 2>/d
   echo "Pick a free key and add this yourself in $bindings_file:" >&2
   echo "  o.bind(\"$key\", \"Window switcher\", \"omarchy-window-switcher\")" >&2
 else
+  # Atomic-replace rather than opening bindings_file for writing: build the
+  # new content in our own temp file, then `mv` it over the target. rename(2)
+  # replaces whatever directory entry sits at bindings_file — symlink or
+  # not — rather than following it, so there's no write-open against the
+  # (mutable, same-user-writable) path for a symlink swap to redirect.
+  # See github.com/HANCORE-linux/omarchy-plugin-marketplace/issues/2460.
+  bindings_dir=$(dirname -- "$bindings_file")
+  tmp=$(mktemp "$bindings_dir/.bindings.lua.XXXXXX")
+  trap 'rm -f "$tmp"' EXIT
+  cp -- "$bindings_file" "$tmp"
   {
     echo ""
     echo "-- Searchable window switcher (type to filter open windows, Enter to focus)."
     echo "-- Installed by omarchy-window-switcher's install.sh."
     echo "o.bind(\"$key\", \"Window switcher\", \"omarchy-window-switcher\")"
-  } >> "$bindings_file"
+  } >> "$tmp"
+  chmod --reference="$bindings_file" "$tmp" 2>/dev/null || true
+  mv -f -- "$tmp" "$bindings_file"
+  trap - EXIT
   echo "Added a $key keybinding to $bindings_file"
 fi
 
